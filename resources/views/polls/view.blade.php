@@ -15,12 +15,11 @@
 <ul class="list-group mb-5" id="results"></ul>
 
 <script>
-let hasVoted = false;
-const voteToken = "{{ $voteToken }}";
+let voteToken = "{{ $voteToken }}";
 
 $(document).ready(function () {
 
-    // Load options (SAFE)
+    // Load poll options
     $.get('/api/poll-options/{{$id}}', function (data) {
         let html = '';
         data.forEach(o => {
@@ -38,15 +37,12 @@ $(document).ready(function () {
         $('#options').html(html);
     });
 
-    // REAL CLICK ONLY
+    // Vote click (re-voting allowed)
     $(document).on('click', '.vote-btn', function () {
-
-        if (hasVoted) return;
-        hasVoted = true;
 
         $.post('/vote', {
             _token: '{{ csrf_token() }}',
-            vote_token: voteToken,   // 🔑 ONE-TIME TOKEN
+            vote_token: voteToken,
             poll_id: {{$id}},
             option_id: $(this).data('option')
         }, function (res) {
@@ -56,7 +52,8 @@ $(document).ready(function () {
                 .removeClass()
                 .addClass(res.status ? 'text-success fw-bold' : 'text-danger fw-bold');
 
-            if (!res.status) hasVoted = false;
+            // 🔄 regenerate token for next vote
+            voteToken = crypto.randomUUID();
         });
     });
 

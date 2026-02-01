@@ -15,7 +15,7 @@ class PollController extends Controller
 
     public function show($id)
     {
-        // 🔐 Generate ONE-TIME vote token
+        // 🔐 Generate vote token (used for first vote)
         $voteToken = Str::uuid()->toString();
         session(['vote_token' => $voteToken]);
 
@@ -24,25 +24,31 @@ class PollController extends Controller
 
     public function vote(Request $request)
     {
-        // 🔒 BLOCK auto / replayed POST
+        // 🔒 Validate token (prevents auto / replay)
         if (
             !$request->has('vote_token') ||
             $request->vote_token !== session('vote_token')
         ) {
             return response()->json([
                 'status' => false,
-                'msg' => 'Invalid or replayed vote request'
+                'msg' => 'Invalid vote request'
             ], 403);
         }
 
-        // 🔥 Consume token (ONE TIME ONLY)
-        session()->forget('vote_token');
-
-        return response()->json(
-            VoteService::vote(
-                $request->poll_id,
-                $request->option_id
-            )
+        // ✅ Process vote (same IP allowed – handled in VoteService)
+        $result = VoteService::vote(
+            $request->poll_id,
+            $request->option_id
         );
+
+        // 🔁 Generate NEW token so user can vote again
+        $newToken = Str::uuid()->toString();
+        session(['vote_token' => $newToken]);
+
+        return response()->json([
+            'status' => true,
+            'msg' => $result['msg'],
+            'vote_token' => $newToken   // send back to frontend
+        ]);
     }
 }

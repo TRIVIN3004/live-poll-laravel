@@ -10,19 +10,40 @@ class VoteService
     {
         $ip = request()->ip();
 
-        // IP restriction
-        $exists = DB::table('votes')
+        // 🔍 Check if this IP already voted for this poll
+        $oldVote = DB::table('votes')
             ->where('poll_id', $pollId)
             ->where('ip_address', $ip)
-            ->exists();
+            ->first();
 
-        if ($exists) {
-            return [
-                'status' => false,
-                'msg' => 'You already voted from this IP'
-            ];
+        // 🧾 If old vote exists, store history & remove it
+        if ($oldVote) {
+            DB::table('vote_history')->insert([
+                'poll_id' => $pollId,
+                'ip_address' => $ip,
+                'old_option_id' => $oldVote->option_id,
+                'new_option_id' => $optionId,
+                'action' => 'revoted',
+                'action_time' => now()
+            ]);
+
+            DB::table('votes')
+                ->where('poll_id', $pollId)
+                ->where('ip_address', $ip)
+                ->delete();
+        } else {
+            // 🧾 First-time vote history
+            DB::table('vote_history')->insert([
+                'poll_id' => $pollId,
+                'ip_address' => $ip,
+                'old_option_id' => null,
+                'new_option_id' => $optionId,
+                'action' => 'voted',
+                'action_time' => now()
+            ]);
         }
 
+        // ✅ Insert new vote
         DB::table('votes')->insert([
             'poll_id' => $pollId,
             'option_id' => $optionId,
@@ -30,18 +51,11 @@ class VoteService
             'created_at' => now()
         ]);
 
-        DB::table('vote_history')->insert([
-            'poll_id' => $pollId,
-            'ip_address' => $ip,
-            'old_option_id' => null,
-            'new_option_id' => $optionId,
-            'action' => 'voted',
-            'action_time' => now()
-        ]);
-
         return [
             'status' => true,
-            'msg' => 'Vote submitted successfully'
+            'msg' => $oldVote
+                ? 'Your vote has been updated successfully'
+                : 'Vote submitted successfully'
         ];
     }
 
@@ -54,6 +68,7 @@ class VoteService
 
         if (!$vote) return;
 
+        // 🧾 Store release history
         DB::table('vote_history')->insert([
             'poll_id' => $pollId,
             'ip_address' => $ip,
@@ -63,6 +78,7 @@ class VoteService
             'action_time' => now()
         ]);
 
+        // ❌ Remove vote
         DB::table('votes')
             ->where('poll_id', $pollId)
             ->where('ip_address', $ip)
